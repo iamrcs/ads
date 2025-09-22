@@ -2,7 +2,7 @@
    Dynamic Automated Ads
    Sponsored by It Is Unique Official
    Namespace: iiuo-
-   Clean, Minimal, Responsive
+   Plain & Professional (Google Ads Style)
 */
 
 (function iiuoAds() {
@@ -10,8 +10,8 @@
 
   const XML_PATH = "https://ads.itisuniqueofficial.com/ad-data.xml";
   const STORAGE_KEY = "iiuo_ad_metrics_v3";
-  const FREQUENCY_CAP = 5; // max times same ad shown per session
-  const FETCH_TIMEOUT = 8000; // ms
+  const FREQUENCY_CAP = 5;
+  const FETCH_TIMEOUT = 8000;
   const DEBUG = true;
 
   let adQueue = [];
@@ -33,18 +33,12 @@
       .iiuo-ad-card {
         width: 100%;
         border: 1px solid #ddd;
-        border-radius: 10px;
+        border-radius: 0;
         background: #fff;
         overflow: hidden;
         display: flex;
         flex-direction: column;
         box-sizing: border-box;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-      }
-      .iiuo-ad-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
       }
       .iiuo-ad-card a,
       .iiuo-ad-card a:visited {
@@ -57,7 +51,7 @@
         justify-content: space-between;
         align-items: center;
         padding: 6px 12px;
-        background: #fafafa;
+        background: #f9f9f9;
         font-size: 12px;
         color: #666;
         border-bottom: 1px solid #e6e6e6;
@@ -76,40 +70,33 @@
         color: #777; 
         line-height: 1;
         padding: 2px 6px;
-        border-radius: 4px;
       }
       .iiuo-ad-close:hover { 
-        background: #eee; 
         color: #000; 
       }
       .iiuo-ad-badge {
         display: inline-block;
         margin-left: 6px;
-        padding: 2px 6px;
+        padding: 1px 4px;
         font-size: 10px;
         font-weight: 600;
         color: #333;
         border: 1px solid #ccc;
-        border-radius: 4px;
         background: #f4f4f4;
         text-transform: uppercase;
         letter-spacing: 0.5px;
       }
       .iiuo-ad-body {
         display: flex;
-        gap: 14px;
-        padding: 12px;
+        gap: 12px;
+        padding: 10px;
         align-items: flex-start;
         width: 100%;
         box-sizing: border-box;
-        color: inherit;
-        transition: background 0.2s ease;
       }
-      .iiuo-ad-body:hover { background: #f9f9f9; }
       .iiuo-ad-icon {
         width: 90px; 
         height: 90px;
-        border-radius: 6px;
         object-fit: cover;
         border: 1px solid #ddd;
         flex-shrink: 0;
@@ -122,19 +109,18 @@
         justify-content: center;
         overflow-wrap: break-word;
         word-break: break-word;
-        line-break: anywhere;
       }
       .iiuo-ad-title {
-        font-size: 16px; 
+        font-size: 15px; 
         font-weight: 700;
         color: #0056a3;
-        margin: 0 0 6px; 
+        margin: 0 0 4px; 
         line-height: 1.3;
       }
       .iiuo-ad-desc {
         font-size: 13px; 
         color: #444;
-        margin: 0 0 6px; 
+        margin: 0 0 4px; 
         line-height: 1.5;
       }
       .iiuo-ad-link {
@@ -146,7 +132,7 @@
       @media (max-width: 600px) {
         .iiuo-ad-body { 
           flex-direction: column; 
-          gap: 10px; 
+          gap: 8px; 
           align-items: flex-start; 
         }
         .iiuo-ad-icon { 
@@ -154,7 +140,7 @@
           max-height: 220px; 
           height: auto; 
         }
-        .iiuo-ad-title { font-size: 15px; }
+        .iiuo-ad-title { font-size: 14px; }
         .iiuo-ad-desc { font-size: 13px; }
         .iiuo-ad-link { font-size: 12px; }
       }
@@ -177,15 +163,14 @@
           border-color: #555; 
           color: #bbb; 
         }
-        .iiuo-ad-close:hover { background: #444; }
-        .iiuo-ad-body:hover { background: #242424; }
       }
     `;
     document.head.appendChild(style);
   }
 
   // -------- Helpers -------- //
-  const qText = (el, sel, def = "") => el.querySelector(sel)?.textContent?.trim() ?? def;
+  const qText = (el, sel, def = "") =>
+    el.querySelector(sel)?.textContent?.trim() ?? def;
 
   function adIdFrom(adEl) {
     const href = qText(adEl, "href", "");
@@ -199,6 +184,15 @@
     return `iiuo_${Math.abs(hash)}`;
   }
 
+  function escapeHTML(str) {
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
   function safeLocalStorage(action, key, value) {
     try {
       if (action === "get") return JSON.parse(localStorage.getItem(key) || "{}");
@@ -209,18 +203,14 @@
     }
   }
 
-  function loadMetrics() {
-    return safeLocalStorage("get", STORAGE_KEY);
-  }
-  function saveMetrics(m) {
-    safeLocalStorage("set", STORAGE_KEY, m);
-  }
+  function loadMetrics() { return safeLocalStorage("get", STORAGE_KEY); }
+  function saveMetrics(m) { safeLocalStorage("set", STORAGE_KEY, m); }
   function ensureMetric(m, id) {
     if (!m[id]) m[id] = { impressions: 0, clicks: 0, title: "", href: "" };
     return m[id];
   }
 
-  // -------- Fetch Ads (no cache + timeout) -------- //
+  // -------- Fetch Ads -------- //
   async function fetchWithTimeout(url, options = {}, timeout = FETCH_TIMEOUT) {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeout);
@@ -277,13 +267,13 @@
 
   // -------- Rendering -------- //
   function renderAdInto(container, adEl, metrics) {
-    const href = qText(adEl, "href", "#");
-    const sponsorUrl = qText(adEl, "sponsor-url", "#");
-    const sponsorName = qText(adEl, "sponsor-name", "It Is Unique Official");
-    const src = qText(adEl, "src", "");
-    const adTitle = qText(adEl, "ad-title", "Untitled Ad");
-    const adDesc = qText(adEl, "ad-desc", "");
-    const adLink = qText(adEl, "ad-link", href);
+    const href = escapeHTML(qText(adEl, "href", "#"));
+    const sponsorUrl = escapeHTML(qText(adEl, "sponsor-url", "#"));
+    const sponsorName = escapeHTML(qText(adEl, "sponsor-name", "It Is Unique Official"));
+    const src = escapeHTML(qText(adEl, "src", ""));
+    const adTitle = escapeHTML(qText(adEl, "ad-title", "Untitled Ad"));
+    const adDesc = escapeHTML(qText(adEl, "ad-desc", ""));
+    const adLink = escapeHTML(qText(adEl, "ad-link", href));
 
     const id = adIdFrom(adEl);
     const metric = ensureMetric(metrics, id);
@@ -292,35 +282,31 @@
     const adCard = document.createElement("aside");
     adCard.className = "iiuo-ad-card";
     adCard.innerHTML = `
-      <header class="iiuo-ad-top">
+      <div class="iiuo-ad-top">
         <span class="iiuo-ad-sponsor">
           Sponsored · <a href="${sponsorUrl}" target="_blank" rel="noopener nofollow">${sponsorName}</a>
           <span class="iiuo-ad-badge">Ad</span>
         </span>
         <button class="iiuo-ad-close" aria-label="Dismiss ad">×</button>
-      </header>
+      </div>
       <a class="iiuo-ad-body" href="${href}" target="_blank" rel="noopener sponsored">
         <img class="iiuo-ad-icon" src="${src}" alt="${sponsorName} ad" loading="lazy" />
         <div class="iiuo-ad-text">
-          <h3 class="iiuo-ad-title">${adTitle}</h3>
-          <p class="iiuo-ad-desc">${adDesc}</p>
+          <div class="iiuo-ad-title">${adTitle}</div>
+          <div class="iiuo-ad-desc">${adDesc}</div>
           <span class="iiuo-ad-link">${adLink}</span>
         </div>
       </a>
     `;
 
     adCard.querySelector(".iiuo-ad-close").addEventListener("click", () => adCard.remove());
-
     adCard.querySelector(".iiuo-ad-body").addEventListener("click", () => {
-      metric.clicks++;
-      saveMetrics(metrics);
+      metric.clicks++; saveMetrics(metrics);
     });
 
     const observer = new IntersectionObserver((entries, obs) => {
       if (entries[0].isIntersecting) {
-        metric.impressions++;
-        saveMetrics(metrics);
-        obs.disconnect();
+        metric.impressions++; saveMetrics(metrics); obs.disconnect();
       }
     }, { threshold: 0.5 });
     observer.observe(adCard);
@@ -371,7 +357,7 @@
     renderAll();
     if (rotationInterval > 0) {
       setInterval(() => {
-        if (document.hidden) return; // pause rotation when tab inactive
+        if (document.hidden) return;
         renderAll();
       }, rotationInterval * 1000);
     }
