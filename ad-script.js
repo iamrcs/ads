@@ -3,7 +3,8 @@
    Sponsored by It Is Unique Official
    Namespace: iiuo-
    Plain & Professional
-   GA4 Integrated
+   GA4 Integrated + Console Logging
+   All images 1:1 square auto-fit
 */
 
 (function iiuoAds() {
@@ -13,7 +14,7 @@
   const STORAGE_KEY = "iiuo_ad_metrics_v3";
   const FREQUENCY_CAP = 5;
   const FETCH_TIMEOUT = 8000;
-  const DEBUG = false;
+  const DEBUG = true;
 
   let adQueue = [];
   let allAds = [];
@@ -39,7 +40,15 @@
       .iiuo-ad-title { font-size:15px; font-weight:700; color:#0056a3; margin:0 0 4px; line-height:1.3; }
       .iiuo-ad-desc { font-size:13px; color:#444; margin:0 0 4px; line-height:1.5; }
       .iiuo-ad-link { font-size:12px; color:#006600; word-break:break-word; opacity:0.9; }
-      @media (max-width:600px) { .iiuo-ad-body { flex-direction:column; gap:8px; align-items:flex-start; } .iiuo-ad-icon { width:100%; max-height:220px; height:auto; } .iiuo-ad-title{font-size:14px;} .iiuo-ad-desc{font-size:13px;} .iiuo-ad-link{font-size:12px;} }
+
+      @media (max-width:600px) {
+        .iiuo-ad-body { flex-direction:column; gap:8px; align-items:flex-start; }
+        .iiuo-ad-icon { width:100%; aspect-ratio:1 / 1; max-height:220px; object-fit:cover; }
+        .iiuo-ad-title{font-size:14px;}
+        .iiuo-ad-desc{font-size:13px;}
+        .iiuo-ad-link{font-size:12px;}
+      }
+
       @media (prefers-color-scheme:dark) {
         .iiuo-ad-card { background:#1e1e1e; border-color:#333; color:#eee; }
         .iiuo-ad-top { background:#2a2a2a; border-bottom-color:#333; color:#aaa; }
@@ -118,10 +127,12 @@
     return null;
   }
 
-  // -------- GA4 Tracking -------- //
+  // -------- GA4 Tracking + Console -------- //
   function trackEventGA4(eventName, params={}) {
-    try { if(typeof gtag==="function") gtag("event", eventName, params); else if(DEBUG) console.log("GA skipped:", eventName, params); }
-    catch(e){ if(DEBUG) console.warn("GA tracking error:",e); }
+    try {
+      if(typeof gtag==="function") gtag("event", eventName, params);
+      if(DEBUG) console.log(`GA Event: ${eventName}`, params);
+    } catch(e){ if(DEBUG) console.warn("GA tracking error:",e); }
   }
 
   // -------- Rendering -------- //
@@ -177,7 +188,6 @@
       },{threshold:0.5});
       observer.observe(adCard);
     } else {
-      // fallback if IntersectionObserver not supported
       metric.impressions++; saveMetrics(metrics);
       trackEventGA4("ads-iiuo-impressions",{ad_id:id, ad_title:adTitle, sponsor:sponsorName});
       trackEventGA4("ads-iiuo-sponsors",{sponsor:sponsorName});
@@ -185,6 +195,9 @@
 
     container.innerHTML="";
     container.appendChild(adCard);
+
+    if(DEBUG) console.log("Rendered Ad:", {id, adTitle, sponsorName, href, impressions:metric.impressions, clicks:metric.clicks});
+
     return {id, adTitle, sponsorName, href, impressions:metric.impressions, clicks:metric.clicks};
   }
 
