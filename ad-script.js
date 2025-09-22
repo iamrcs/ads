@@ -26,7 +26,6 @@
       .iiuo-ad-container {
         width: 100%;
         margin: 16px 0;
-        font-family: system-ui, Arial, sans-serif;
         display: block;
         box-sizing: border-box;
       }
@@ -184,13 +183,45 @@
     return `iiuo_${Math.abs(hash)}`;
   }
 
-  function escapeHTML(str) {
-    return str
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
+  // Extended HTML Escaper (with INR ₹ and more)
+  function escapeHTML(str = "") {
+    if (!str) return "";
+
+    const map = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;",
+      "₹": "&#8377;", // INR symbol
+      "€": "&euro;",
+      "£": "&pound;",
+      "¥": "&yen;",
+      "©": "&copy;",
+      "®": "&reg;",
+      "™": "&trade;",
+      "•": "&bull;",
+      "–": "&ndash;",
+      "—": "&mdash;",
+      "±": "&plusmn;",
+      "*": "&#42;",
+      "^": "&#94;",
+      "$": "&#36;",
+      "#": "&#35;",
+      "@": "&#64;",
+      "?": "&#63;",
+      "-": "&#45;",
+      "_": "&#95;",
+      "(": "&#40;",
+      ")": "&#41;"
+    };
+
+    return str.replace(/[\s\S]/g, (ch) => {
+      if (map[ch]) return map[ch];
+      const code = ch.charCodeAt(0);
+      // Keep ASCII safe, encode others
+      return code > 127 ? `&#${code};` : ch;
+    });
   }
 
   function safeLocalStorage(action, key, value) {
