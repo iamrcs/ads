@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ads rotation-interval="10">
+
+  <!-- 1 -->
+  <ad weight="1">
+    <href>https://www.instagram.com/itisuniqueofficial/</href>
+    <sponsor-url>https://ads.itisuniqueofficial.com/</sponsor-url>
+    <sponsor-name>itisuniqueofficial.com</sponsor-name>
+    <src>https://play-lh.googleusercontent.com/VRMWkE5p3CkWhJs6nv-9ZsLAs1QOg5ob1_3qg-rckwYW7yp1fMrYZqnEFpk0IoVP4LM=s152-rw</src>
+    <alt>Follow It Is Unique Official on Instagram</alt>
+    <width>152</width>
+    <height>152</height>
+    <ad-title>Follow Us on Instagram</ad-title>
+    <ad-desc>Catch our latest posts, reels, and creative updates. Be part of the It Is Unique Official community today!</ad-desc>
+    <ad-link>instagram.com/itisuniqueofficial</ad-link>
+  </ad>
+
+  <!-- 2 -->
+  <ad weight="2">
+    <href>https://t.me/itisuniqueofficial_channel</href>
+    <sponsor-url>https://ads.itisuniqueofficial.com/</sponsor-url>
+    <sponsor-name>itisuniqueofficial.com</sponsor-name>
+    <src>https://play-lh.googleusercontent.com/ZU9cSsyIJZo6Oy7HTHiEPwZg0m2Crep-d5ZrfajqtsH-qgUXSqKpNA2FpPDTn-7qA5Q=s152-rw</src>
+    <alt>Join It Is Unique Official on Telegram</alt>
+    <width>152</width>
+    <height>152</height>
+    <ad-title>Join Us on Telegram</ad-title>
+    <ad-desc>Instant alerts, exclusive content & quick updates. Stay connected with It Is Unique Official on Telegram.</ad-desc>
+    <ad-link>t.me/itisuniqueofficial_channel</ad-link>
+  </ad>
+
+  <!-- 3 -->
+  <ad weight="3">
+    <href>https://www.itisuniqueofficial.com/2024/12/canva-pro.html</href>
+    <sponsor-url>https://www.itisuniqueofficial.com/</sponsor-url>
+    <sponsor-name>itisuniqueofficial.com</sponsor-name>
+    <src>https://play-lh.googleusercontent.com/AZvFkMmN5dAzee-N6UrjRo8nS0eOu28U-sJx_oimuzo_5ZshMBccG1IJkAWzD5XfL2Q=w152-h152-p-k-no-nu-rw</src>
+    <alt>Canva Pro Premium Access</alt>
+    <width>152</width>
+    <height>152</height>
+    <ad-title>Canva Pro at Just ₹101</ad-title>
+    <ad-desc>Unlock premium Canva Pro features at the lowest price. Start creating like a pro today!</ad-desc>
+    <ad-link>itisuniqueofficial.com/2024/12/canva-pro.html</ad-link>
+  </ad>
+
+  <!-- 4 -->
+  <ad weight="4">
+    <href>https://www.theblazetimes.in/2025/08/realme-p4-series-india-launch-august-20-2025.html</href>
+    <sponsor-url>https://www.theblazetimes.in/</sponsor-url>
+    <sponsor-name>theblazetimes.in</sponsor-name>
+    <src>https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjsbTstFndSOfNMmPqIcX02XfuZd5irwQj3AXr1rKf5Bo84yf-GtL6bRmnESF3eZ1zdXyy3VYTgICNv0HfMzRXkodeToHPd_zNvXHIlOe1_cewEGwVJDaFD2PDbyfQmoXDspCzs23Aq6qDmB2kH25bdOUODqrg2JOWBtXdc1gSNLs7NdrVez5CleZ-rnso/s1600-rw/realme%20P4%20Pro%205G.jpg</src>
+    <alt>Realme P4 Series India Launch</alt>
+    <width>1200</width>
+    <height>675</height>
+    <ad-title>Realme P4 Series Launch – Aug 20</ad-title>
+    <ad-desc>Experience Realme P4 & P4 Pro with AMOLED display, 7000mAh battery & AI cameras. Prices start under ₹30K.</ad-desc>
+    <ad-link>theblazetimes.in/2025/08/realme-p4-series-india-launch-august-20-2025.html</ad-link>
+  </ad>
+
+  <!-- 5 -->
+  <ad weight="5">
+    <href>https://www.itisuniqueofficial.com/2025/07/buy-crunchyroll-premium-accounts.html</href>
+    <sponsor-url>https://www.itisuniqueofficial.com/</sponsor-url>
+    <sponsor-name>itisuniqueofficial.com</sponsor-name>
+    <src>https://play-lh.googleusercontent.com/Fnor8mzNEsiWTfSTI_RXUmsaZW0eYw0RkIgIhSCphG4Y0ZgwC-zK2qzik-9VIxQDWQ=s152-rw</src>
+    <alt>Crunchyroll Premium Accounts</alt>
+    <width>152</width>
+    <height>152</height>
+    <ad-title>Crunchyroll Premium Deals</ad-title>
+    <ad-desc>Get pre-activated Crunchyroll Premium accounts at an unbeatable low price. Start streaming anime today!</ad-desc>
+    <ad-link>itisuniqueofficial.com/2025/07/buy-crunchyroll-premium-accounts.html</ad-link>
+  </ad>
+
+</ads>
