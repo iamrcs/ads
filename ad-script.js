@@ -3,28 +3,25 @@
    Sponsored by It Is Unique Official
    Namespace: iiuo-
    Plain & Professional
-   Production-ready: Lazy-load + GA4 batching + Daily Cap + 1:1 images
+   Production-ready
 */
 
 (function iiuoAds(){
 "use strict";
 
 const XML_PATH="https://ads.itisuniqueofficial.com/ad-data.xml";
-const STORAGE_KEY="iiuo_ad_metrics_v5";
+const STORAGE_KEY="iiuo_ad_metrics_final";
 const FREQUENCY_CAP=5;
 const FETCH_TIMEOUT=8000;
 const DEBUG=true;
-const BATCH_INTERVAL=5000; // send batched events every 5s
-const CLICK_DEBOUNCE_MS=1500; // debounce clicks per ad
-const DAILY_RESET_HOUR=0; // midnight reset
+const BATCH_INTERVAL=5000;
+const CLICK_DEBOUNCE_MS=1500;
 
-let adQueue=[];
 let allAds=[];
-let queueIndex=0;
 const batchedEvents={clicks:[],impressions:[],sponsors:new Set()};
 const lastClickTimes={};
 
-// -------- CSS Injection -------- //
+// -------- CSS -------- //
 function injectCSS(){
   if(document.getElementById("iiuo-ad-style")) return;
   const style=document.createElement("style");
@@ -64,23 +61,9 @@ function injectCSS(){
 
 // -------- Helpers -------- //
 const qText=(el,sel,def="")=>el.querySelector(sel)?.textContent?.trim()??def;
-
-function adIdFrom(adEl){
-  const href=qText(adEl,"href",""); const title=qText(adEl,"ad-title","");
-  let hash=0; const str=href+"||"+title;
-  for(let i=0;i<str.length;i++){hash=(hash<<5)-hash+str.charCodeAt(i);hash|=0;}
-  return `iiuo_${Math.abs(hash)}`;
-}
-
+function adIdFrom(adEl){const href=qText(adEl,"href",""); const title=qText(adEl,"ad-title",""); let hash=0; const str=href+"||"+title; for(let i=0;i<str.length;i++){hash=(hash<<5)-hash+str.charCodeAt(i); hash|=0;} return `iiuo_${Math.abs(hash)}`;}
 function escapeHTML(str){return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");}
-
-function safeLocalStorage(action,key,value){
-  try{
-    if(action==="get") return JSON.parse(localStorage.getItem(key)||"{}");
-    if(action==="set") localStorage.setItem(key,JSON.stringify(value));
-  }catch(e){if(DEBUG)console.warn("LocalStorage blocked:",e);return action==="get"?{}:undefined;}
-}
-
+function safeLocalStorage(action,key,value){try{if(action==="get") return JSON.parse(localStorage.getItem(key)||"{}"); if(action==="set") localStorage.setItem(key,JSON.stringify(value));}catch(e){if(DEBUG)console.warn("LocalStorage blocked:",e); return action==="get"?{}:undefined;}}
 function loadMetrics(){return safeLocalStorage("get",STORAGE_KEY);}
 function saveMetrics(m){safeLocalStorage("set",STORAGE_KEY,m);}
 function ensureMetric(m,id){if(!m[id]) m[id]={impressions:0,clicks:0,title:"",href:"",lastShownDay:null}; return m[id];}
@@ -91,41 +74,22 @@ function resetDailyMetrics(metrics){
   Object.values(metrics).forEach(metric=>{if(metric.lastShownDay!==today){metric.impressions=0;metric.lastShownDay=today;}});
   saveMetrics(metrics);
 }
-setInterval(()=>{const metrics=loadMetrics();resetDailyMetrics(metrics);},3600000); // hourly check
+setInterval(()=>{const metrics=loadMetrics();resetDailyMetrics(metrics);},3600000);
 
 // -------- Fetch Ads -------- //
-async function fetchWithTimeout(url,options={},timeout=FETCH_TIMEOUT){
-  const controller=new AbortController(); const id=setTimeout(()=>controller.abort(),timeout);
-  try{return await fetch(url,{...options,signal:controller.signal,cache:"no-store"});}finally{clearTimeout(id);}
-}
-
-async function fetchAds(xmlPath){
-  try{
-    const res=await fetchWithTimeout(xmlPath);
-    if(!res.ok) throw new Error("HTTP "+res.status);
-    const text=await res.text();
-    const xml=new DOMParser().parseFromString(text,"application/xml");
-    allAds=Array.from(xml.getElementsByTagName("ad"));
-    return {ads:allAds,rotationInterval:parseInt(xml.documentElement.getAttribute("rotation-interval"))||0};
-  }catch(e){if(DEBUG)console.error("Ad fetch failed:",e);return {ads:[],rotationInterval:0};}
-}
+async function fetchWithTimeout(url,options={},timeout=FETCH_TIMEOUT){const controller=new AbortController(); const id=setTimeout(()=>controller.abort(),timeout); try{return await fetch(url,{...options,signal:controller.signal,cache:"no-store"});}finally{clearTimeout(id);}}
+async function fetchAds(xmlPath){try{const res=await fetchWithTimeout(xmlPath); if(!res.ok) throw new Error("HTTP "+res.status); const text=await res.text(); const xml=new DOMParser().parseFromString(text,"application/xml"); allAds=Array.from(xml.getElementsByTagName("ad")); return {ads:allAds,rotationInterval:parseInt(xml.documentElement.getAttribute("rotation-interval"))||0};}catch(e){if(DEBUG)console.error("Ad fetch failed:",e); return {ads:[],rotationInterval:0};}}
 
 // -------- Queue & Selection -------- //
-function buildAdQueue(){adQueue=[];allAds.forEach(ad=>{const w=Math.max(1,parseInt(ad.getAttribute("weight"))||1);for(let i=0;i<w;i++)adQueue.push(ad);}); queueIndex=0;}
-function nextAd(usedIds,metrics){if(adQueue.length===0)buildAdQueue(); let tries=0; while(tries<adQueue.length){const ad=adQueue[queueIndex]; queueIndex=(queueIndex+1)%adQueue.length; const id=adIdFrom(ad); const metric=ensureMetric(metrics,id); if(!usedIds.has(id) && metric.impressions<FREQUENCY_CAP) return ad; tries++;} return null;}
+function buildAdQueue(){return allAds.map(ad=>{const w=Math.max(1,parseInt(ad.getAttribute("weight"))||1); return Array(w).fill(ad);}).flat();}
+function nextAd(metrics){const queue=buildAdQueue(); for(let ad of queue){const id=adIdFrom(ad); const metric=ensureMetric(metrics,id); if(metric.impressions<FREQUENCY_CAP) return ad;} return queue[0]||null;}
 
-// -------- GA4 + Batch Tracking + Console -------- //
-function enqueueEvent(type,data){
-  if(type==="click") batchedEvents.clicks.push(data);
-  if(type==="impression") batchedEvents.impressions.push(data);
-  if(type==="sponsor") batchedEvents.sponsors.add(data.sponsor);
-  if(DEBUG) console.log(`Enqueued ${type}:`,data);
-}
-
+// -------- GA + Batching -------- //
+function enqueueEvent(type,data){if(type==="click") batchedEvents.clicks.push(data); if(type==="impression") batchedEvents.impressions.push(data); if(type==="sponsor") batchedEvents.sponsors.add(data.sponsor); if(DEBUG) console.log(`Enqueued ${type}:`,data);}
 function sendBatchedEvents(){
-  if(batchedEvents.clicks.length>0){if(typeof gtag==="function") gtag("event","ads-iiuo-clicks",{ads:batchedEvents.clicks}); if(DEBUG) console.log("Batched Clicks Sent:",batchedEvents.clicks); batchedEvents.clicks=[];}
-  if(batchedEvents.impressions.length>0){if(typeof gtag==="function") gtag("event","ads-iiuo-impressions",{ads:batchedEvents.impressions}); if(DEBUG) console.log("Batched Impressions Sent:",batchedEvents.impressions); batchedEvents.impressions=[];}
-  if(batchedEvents.sponsors.size>0){if(typeof gtag==="function") gtag("event","ads-iiuo-sponsors",{sponsors:Array.from(batchedEvents.sponsors)}); if(DEBUG) console.log("Batched Sponsors Sent:",Array.from(batchedEvents.sponsors)); batchedEvents.sponsors.clear();}
+  if(batchedEvents.clicks.length>0){if(typeof gtag==="function") gtag("event","ads-iiuo-clicks",{ads:batchedEvents.clicks}); if(DEBUG)console.log("Batched Clicks Sent:",batchedEvents.clicks); batchedEvents.clicks=[];}
+  if(batchedEvents.impressions.length>0){if(typeof gtag==="function") gtag("event","ads-iiuo-impressions",{ads:batchedEvents.impressions}); if(DEBUG)console.log("Batched Impressions Sent:",batchedEvents.impressions); batchedEvents.impressions=[];}
+  if(batchedEvents.sponsors.size>0){if(typeof gtag==="function") gtag("event","ads-iiuo-sponsors",{sponsors:Array.from(batchedEvents.sponsors)}); if(DEBUG)console.log("Batched Sponsors Sent:",Array.from(batchedEvents.sponsors)); batchedEvents.sponsors.clear();}
 }
 setInterval(sendBatchedEvents,BATCH_INTERVAL);
 window.addEventListener("beforeunload",sendBatchedEvents);
@@ -139,15 +103,12 @@ function renderAdInto(container,adEl,metrics){
   const adTitle=escapeHTML(qText(adEl,"ad-title","Untitled Ad"));
   const adDesc=escapeHTML(qText(adEl,"ad-desc",""));
   const adLink=escapeHTML(qText(adEl,"ad-link",href));
-
   const id=adIdFrom(adEl);
   const metric=ensureMetric(metrics,id);
   metric.title=adTitle; metric.href=href;
 
   const adCard=document.createElement("aside");
   adCard.className="iiuo-ad-card";
-  adCard.setAttribute("role","region");
-  adCard.setAttribute("aria-label","Advertisement");
   adCard.innerHTML=`
     <div class="iiuo-ad-top">
       <span class="iiuo-ad-sponsor">
@@ -172,14 +133,14 @@ function renderAdInto(container,adEl,metrics){
     if(lastClickTimes[id] && now-lastClickTimes[id]<CLICK_DEBOUNCE_MS) return;
     lastClickTimes[id]=now;
     metric.clicks++; saveMetrics(metrics);
-    enqueueEvent("click",{ad_id:id, ad_title:adTitle, sponsor:sponsorName, href:href});
+    enqueueEvent("click",{ad_id:id,ad_title:adTitle,sponsor:sponsorName,href:href});
   });
 
   if("IntersectionObserver" in window){
     const observer=new IntersectionObserver((entries,obs)=>{
       if(entries[0].isIntersecting){
         metric.impressions++; saveMetrics(metrics);
-        enqueueEvent("impression",{ad_id:id, ad_title:adTitle, sponsor:sponsorName});
+        enqueueEvent("impression",{ad_id:id,ad_title:adTitle,sponsor:sponsorName});
         enqueueEvent("sponsor",{sponsor:sponsorName});
         obs.disconnect();
       }
@@ -187,29 +148,16 @@ function renderAdInto(container,adEl,metrics){
     observer.observe(adCard);
   } else {
     metric.impressions++; saveMetrics(metrics);
-    enqueueEvent("impression",{ad_id:id, ad_title:adTitle, sponsor:sponsorName});
+    enqueueEvent("impression",{ad_id:id,ad_title:adTitle,sponsor:sponsorName});
     enqueueEvent("sponsor",{sponsor:sponsorName});
   }
 
   container.innerHTML="";
   container.appendChild(adCard);
   if(DEBUG) console.log("Rendered Ad:", {id, adTitle, sponsorName, href, impressions:metric.impressions, clicks:metric.clicks});
-  return {id, adTitle, sponsorName, href, impressions:metric.impressions, clicks:metric.clicks};
 }
 
-function consoleReport(detailsList){
-  if(!DEBUG || !detailsList.length) return;
-  console.groupCollapsed("%c✔ Ads Report","color:green;font-weight:700;");
-  console.log("Sponsored by: It Is Unique Official");
-  console.table(detailsList.map((d,i)=>({
-    "#":i+1, Title:d.adTitle, Sponsor:d.sponsorName,
-    Impressions:d.impressions, Clicks:d.clicks,
-    CTR:d.impressions?((d.clicks/d.impressions)*100).toFixed(2)+"%":"0%"
-  })));
-  console.groupEnd();
-}
-
-// -------- Lazy-load + Boot -------- //
+// -------- Boot -------- //
 async function boot(){
   injectCSS();
   const metrics=loadMetrics();
@@ -218,23 +166,9 @@ async function boot(){
   if(!ads.length){containers.forEach(c=>c.innerHTML="<p>No ads available.</p>"); return;}
 
   function renderAll(){
-    const details=[]; const usedIds=new Set();
     containers.forEach(container=>{
-      if("IntersectionObserver" in window){
-        const observer=new IntersectionObserver((entries,obs)=>{
-          if(entries[0].isIntersecting){
-            const ad=nextAd(usedIds,metrics);
-            if(ad){usedIds.add(adIdFrom(ad)); details.push(renderAdInto(container,ad,metrics));}
-            obs.disconnect();
-            consoleReport(details);
-          }
-        },{threshold:0.1});
-        observer.observe(container);
-      } else {
-        const ad=nextAd(usedIds,metrics);
-        if(ad){usedIds.add(adIdFrom(ad)); details.push(renderAdInto(container,ad,metrics));}
-        consoleReport(details);
-      }
+      const ad=nextAd(metrics);
+      if(ad) renderAdInto(container,ad,metrics);
     });
   }
 
