@@ -2,69 +2,40 @@
    Dynamic Automated Ads
    Sponsored by It Is Unique Official
    Namespace: iiuo-
-   Production-ready, Accessible, Optimized
+   Plain & Professional
+   Production-ready
 */
 
 (function iiuoAds() {
   "use strict";
 
   // -------- Config -------- //
-  const DEFAULT_XML_PATH = "https://ads.itisuniqueofficial.com/ad-data.xml";
+  const XML_PATH = "https://ads.itisuniqueofficial.com/ad-data.xml";
   const STORAGE_KEY = "iiuo_ad_metrics_final";
+  const DISMISSED_KEY = "iiuo_ad_dismissed";
   const FREQUENCY_CAP = 5;
   const FETCH_TIMEOUT = 8000;
+  const DEBUG = true;
   const BATCH_INTERVAL = 5000;
   const CLICK_DEBOUNCE_MS = 1500;
 
-  // Debug mode can be enabled via: localStorage.setItem("iiuo_debug", "1")
-  const DEBUG = !!localStorage.getItem("iiuo_debug");
-
-  let adsCache = [];
+  let allAds = [];
   const batchedEvents = { clicks: [], impressions: [], sponsors: new Set() };
   const lastClickTimes = {};
 
-  // -------- CSS Injection -------- //
-  function injectCSS() {
-    if (document.getElementById("iiuo-ad-style")) return;
-    if (!document.querySelector(".iiuo-ad-container")) return;
-
-    const style = document.createElement("style");
-    style.id = "iiuo-ad-style";
-    style.textContent = `
-.iiuo-ad-container{width:100%;margin:16px 0;display:block;box-sizing:border-box}
-.iiuo-ad-card{width:100%;border:1px solid #ddd;border-radius:6px;background:#fff;overflow:hidden;display:flex;flex-direction:column;box-sizing:border-box}
-.iiuo-ad-card a,.iiuo-ad-card a:visited{text-decoration:none;color:inherit;outline:none}
-.iiuo-ad-top{display:flex;justify-content:space-between;align-items:center;padding:6px 12px;background:#f9f9f9;font-size:12px;color:#666;border-bottom:1px solid #e6e6e6;flex-wrap:wrap;gap:6px}
-.iiuo-ad-top a{color:#0066cc;font-weight:500}
-.iiuo-ad-close{border:none;background:none;font-size:18px;cursor:pointer;color:#777;line-height:1;padding:2px 6px}
-.iiuo-ad-close:hover{color:#000}
-.iiuo-ad-badge{display:inline-block;margin-left:6px;padding:1px 4px;font-size:10px;font-weight:600;color:#333;border:1px solid #ccc;background:#f4f4f4;text-transform:uppercase;letter-spacing:.5px}
-.iiuo-ad-body{display:flex;gap:12px;padding:10px;align-items:flex-start;width:100%;box-sizing:border-box}
-.iiuo-ad-icon{width:90px;height:90px;aspect-ratio:1/1;object-fit:cover;border:1px solid #ddd;border-radius:4px;flex-shrink:0}
-.iiuo-ad-text{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;overflow-wrap:break-word;word-break:break-word}
-.iiuo-ad-title{font-size:15px;font-weight:700;color:#0056a3;margin:0 0 4px;line-height:1.3}
-.iiuo-ad-desc{font-size:13px;color:#444;margin:0 0 4px;line-height:1.5}
-.iiuo-ad-link{font-size:12px;color:#006600;word-break:break-word;opacity:.9}
-@media(max-width:600px){
-  .iiuo-ad-body{flex-direction:column;gap:10px;align-items:center;text-align:center}
-  .iiuo-ad-icon{width:100%;height:auto;border-radius:0;border:none}
-  .iiuo-ad-title{font-size:14px}
-  .iiuo-ad-desc{font-size:13px}
-  .iiuo-ad-link{font-size:12px}
-}
-@media(prefers-color-scheme:dark){
-  .iiuo-ad-card{background:#1e1e1e;border-color:#333;color:#eee}
-  .iiuo-ad-top{background:#2a2a2a;border-bottom-color:#333;color:#aaa}
-  .iiuo-ad-title{color:#4da6ff}
-  .iiuo-ad-link{color:#55dd55}
-  .iiuo-ad-desc{color:#ccc}
-  .iiuo-ad-badge{background:#333;border-color:#555;color:#bbb}
-}
-`;
-    document.head.appendChild(style);
+  // -------- Helpers -------- //
+  function debugLog(...args) {
+    if (DEBUG) console.log("[iiuo-ads]", ...args);
   }
 
-  // -------- Helpers -------- //
+  const qText = (el, sel, def = "") =>
+    el.querySelector(sel)?.textContent?.trim() ?? def;
+
+  function adIdFrom(adEl) {
+    const raw = qText(adEl, "href", "") + qText(adEl, "ad-title", "");
+    return "iiuo_" + btoa(unescape(encodeURIComponent(raw))).replace(/=+$/, "");
+  }
+
   function escapeHTML(str) {
     return str
       .replace(/&/g, "&amp;")
@@ -74,12 +45,20 @@
       .replace(/'/g, "&#039;");
   }
 
+  function safeURL(url) {
+    try {
+      const u = new URL(url, window.location.href);
+      if (["http:", "https:"].includes(u.protocol)) return u.href;
+    } catch {}
+    return "#";
+  }
+
   function safeLocalStorage(action, key, value) {
     try {
       if (action === "get") return JSON.parse(localStorage.getItem(key) || "{}");
       if (action === "set") localStorage.setItem(key, JSON.stringify(value));
     } catch (e) {
-      if (DEBUG) console.warn("LocalStorage blocked:", e);
+      debugLog("LocalStorage blocked:", e);
       return action === "get" ? {} : undefined;
     }
   }
@@ -103,7 +82,55 @@
     return m[id];
   }
 
-  // Reset daily impressions at midnight
+  function loadDismissed() {
+    return safeLocalStorage("get", DISMISSED_KEY);
+  }
+  function saveDismissed(ids) {
+    safeLocalStorage("set", DISMISSED_KEY, ids);
+  }
+
+  // -------- CSS Injection -------- //
+  function injectCSS() {
+    if (document.getElementById("iiuo-ad-style")) return;
+    if (!document.querySelector(".iiuo-ad-container")) return;
+
+    const style = document.createElement("style");
+    style.id = "iiuo-ad-style";
+    style.textContent = `
+.iiuo-ad-container{width:100%;margin:16px 0;display:block;box-sizing:border-box;text-align:left}
+.iiuo-ad-card{width:100%;border:1px solid #ddd;border-radius:6px;background:#fff;overflow:hidden;display:flex;flex-direction:column;box-sizing:border-box;text-align:left}
+.iiuo-ad-card a,.iiuo-ad-card a:visited{text-decoration:none;color:inherit;outline:none}
+.iiuo-ad-top{display:flex;justify-content:space-between;align-items:center;padding:6px 12px;background:#f9f9f9;font-size:12px;color:#666;border-bottom:1px solid #e6e6e6;flex-wrap:wrap;gap:6px;text-align:left}
+.iiuo-ad-top a{color:#0066cc;font-weight:500}
+.iiuo-ad-close{border:none;background:none;font-size:18px;cursor:pointer;color:#777;line-height:1;padding:2px 6px}
+.iiuo-ad-close:hover{color:#000}
+.iiuo-ad-badge{display:inline-block;margin-left:6px;padding:1px 4px;font-size:10px;font-weight:600;color:#333;border:1px solid #ccc;background:#f4f4f4;text-transform:uppercase;letter-spacing:.5px;text-align:left}
+.iiuo-ad-body{display:flex;gap:12px;padding:10px;align-items:flex-start;width:100%;box-sizing:border-box;text-align:left}
+.iiuo-ad-icon{width:90px;height:90px;aspect-ratio:1/1;object-fit:cover;border:1px solid #ddd;border-radius:4px;flex-shrink:0}
+.iiuo-ad-text{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;overflow-wrap:break-word;word-break:break-word;text-align:left}
+.iiuo-ad-title{font-size:15px;font-weight:700;color:#0056a3;margin:0 0 4px;line-height:1.3;text-align:left}
+.iiuo-ad-desc{font-size:13px;color:#444;margin:0 0 4px;line-height:1.5;text-align:left}
+.iiuo-ad-link{font-size:12px;color:#006600;word-break:break-word;opacity:.9;text-align:left}
+@media(max-width:600px){
+  .iiuo-ad-body{flex-direction:column;gap:10px;align-items:flex-start;text-align:left}
+  .iiuo-ad-icon{width:100%;height:auto;border-radius:0;border:none}
+  .iiuo-ad-title{font-size:14px;text-align:left}
+  .iiuo-ad-desc{font-size:13px;text-align:left}
+  .iiuo-ad-link{font-size:12px;text-align:left}
+}
+@media(prefers-color-scheme:dark){
+  .iiuo-ad-card{background:#1e1e1e;border-color:#333;color:#eee}
+  .iiuo-ad-top{background:#2a2a2a;border-bottom-color:#333;color:#aaa}
+  .iiuo-ad-title{color:#4da6ff}
+  .iiuo-ad-link{color:#55dd55}
+  .iiuo-ad-desc{color:#ccc}
+  .iiuo-ad-badge{background:#333;border-color:#555;color:#bbb}
+}
+`;
+    document.head.appendChild(style);
+  }
+
+  // -------- Daily Reset -------- //
   function resetDailyMetrics(metrics) {
     const today = new Date().toISOString().slice(0, 10);
     Object.values(metrics).forEach((metric) => {
@@ -114,7 +141,10 @@
     });
     saveMetrics(metrics);
   }
-  setInterval(() => resetDailyMetrics(loadMetrics()), 3600000);
+  setInterval(() => {
+    const metrics = loadMetrics();
+    resetDailyMetrics(metrics);
+  }, 3600000);
 
   // -------- Fetch Ads -------- //
   async function fetchWithTimeout(url, options = {}, timeout = FETCH_TIMEOUT) {
@@ -139,53 +169,34 @@
       const text = await res.text();
       const xml = new DOMParser().parseFromString(text, "application/xml");
 
-      // Normalize into JS objects
-      adsCache = Array.from(xml.getElementsByTagName("ad")).map((ad) => ({
-        id: generateAdId(ad),
-        href: escapeHTML(ad.querySelector("href")?.textContent || "#"),
-        sponsorUrl: escapeHTML(ad.querySelector("sponsor-url")?.textContent || "#"),
-        sponsorName: escapeHTML(
-          ad.querySelector("sponsor-name")?.textContent || "It Is Unique Official"
-        ),
-        src: escapeHTML(ad.querySelector("src")?.textContent || ""),
-        adTitle: escapeHTML(ad.querySelector("ad-title")?.textContent || "Untitled Ad"),
-        adDesc: escapeHTML(ad.querySelector("ad-desc")?.textContent || ""),
-        adLink: escapeHTML(ad.querySelector("ad-link")?.textContent || ""),
-        weight: Math.max(1, parseInt(ad.getAttribute("weight")) || 1),
-      }));
-
+      allAds = Array.from(xml.getElementsByTagName("ad"));
       return {
-        ads: adsCache,
+        ads: allAds,
         rotationInterval:
           parseInt(xml.documentElement.getAttribute("rotation-interval")) || 0,
       };
     } catch (e) {
-      if (DEBUG) console.error("Ad fetch failed:", e);
+      debugLog("Ad fetch failed:", e);
       return { ads: [], rotationInterval: 0 };
     }
   }
 
   // -------- Queue & Selection -------- //
-  function generateAdId(adEl) {
-    const href = adEl.querySelector("href")?.textContent || "";
-    const title = adEl.querySelector("ad-title")?.textContent || "";
-    let hash = 0;
-    const str = href + "||" + title;
-    for (let i = 0; i < str.length; i++) {
-      hash = (hash << 5) - hash + str.charCodeAt(i);
-      hash |= 0;
-    }
-    return `iiuo_${Math.abs(hash)}`;
-  }
-
   function buildAdQueue() {
-    return adsCache.flatMap((ad) => Array(ad.weight).fill(ad));
+    return allAds
+      .map((ad) => {
+        const w = Math.max(1, parseInt(ad.getAttribute("weight")) || 1);
+        return Array(w).fill(ad);
+      })
+      .flat();
   }
 
-  function nextAd(metrics) {
+  function nextAd(metrics, dismissed) {
     const queue = buildAdQueue();
     for (let ad of queue) {
-      const metric = ensureMetric(metrics, ad.id);
+      const id = adIdFrom(ad);
+      if (dismissed[id]) continue;
+      const metric = ensureMetric(metrics, id);
       if (metric.impressions < FREQUENCY_CAP) return ad;
     }
     return queue[0] || null;
@@ -196,88 +207,84 @@
     if (type === "click") batchedEvents.clicks.push(data);
     if (type === "impression") batchedEvents.impressions.push(data);
     if (type === "sponsor") batchedEvents.sponsors.add(data.sponsor);
-
-    if (DEBUG) console.log(`Enqueued ${type}:`, data);
-
-    // Also dispatch custom DOM event
-    document.dispatchEvent(new CustomEvent(`iiuoAd${type}`, { detail: data }));
+    debugLog(`Enqueued ${type}:`, data);
   }
 
   function sendBatchedEvents() {
     if (batchedEvents.clicks.length > 0) {
       if (typeof gtag === "function")
         gtag("event", "ads-iiuo-clicks", { ads: batchedEvents.clicks });
+      debugLog("Batched Clicks Sent:", batchedEvents.clicks);
       batchedEvents.clicks = [];
     }
-
     if (batchedEvents.impressions.length > 0) {
       if (typeof gtag === "function")
         gtag("event", "ads-iiuo-impressions", {
           ads: batchedEvents.impressions,
         });
+      debugLog("Batched Impressions Sent:", batchedEvents.impressions);
       batchedEvents.impressions = [];
     }
-
     if (batchedEvents.sponsors.size > 0) {
       if (typeof gtag === "function")
         gtag("event", "ads-iiuo-sponsors", {
           sponsors: Array.from(batchedEvents.sponsors),
         });
+      debugLog("Batched Sponsors Sent:", Array.from(batchedEvents.sponsors));
       batchedEvents.sponsors.clear();
     }
   }
 
   setInterval(sendBatchedEvents, BATCH_INTERVAL);
-
-  // Use Beacon API on unload for reliability
-  window.addEventListener("unload", () => {
-    if (batchedEvents.clicks.length || batchedEvents.impressions.length) {
-      navigator.sendBeacon(
-        "/ads/track",
-        JSON.stringify({
-          clicks: batchedEvents.clicks,
-          impressions: batchedEvents.impressions,
-          sponsors: Array.from(batchedEvents.sponsors),
-        })
-      );
-    }
+  window.addEventListener("beforeunload", sendBatchedEvents);
+  window.addEventListener("pagehide", sendBatchedEvents);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) sendBatchedEvents();
   });
 
   // -------- Rendering -------- //
-  function renderAdInto(container, ad, metrics) {
-    const id = ad.id;
+  function renderAdInto(container, adEl, metrics, dismissed) {
+    const href = safeURL(qText(adEl, "href", "#"));
+    const sponsorUrl = safeURL(qText(adEl, "sponsor-url", "#"));
+    const sponsorName = escapeHTML(
+      qText(adEl, "sponsor-name", "It Is Unique Official")
+    );
+    const src = safeURL(qText(adEl, "src", ""));
+    const adTitle = escapeHTML(qText(adEl, "ad-title", "Untitled Ad"));
+    const adDesc = escapeHTML(qText(adEl, "ad-desc", ""));
+    const adLink = escapeHTML(qText(adEl, "ad-link", href));
+    const id = adIdFrom(adEl);
+
     const metric = ensureMetric(metrics, id);
-    metric.title = ad.adTitle;
-    metric.href = ad.href;
+    metric.title = adTitle;
+    metric.href = href;
 
     const adCard = document.createElement("aside");
     adCard.className = "iiuo-ad-card";
-    adCard.setAttribute("role", "complementary");
-    adCard.setAttribute("aria-label", "Sponsored Ad");
-
+    adCard.setAttribute("role", "region");
+    adCard.setAttribute("aria-label", "Advertisement");
     adCard.innerHTML = `
       <div class="iiuo-ad-top">
         <span class="iiuo-ad-sponsor">
-          Sponsored · <a href="${ad.sponsorUrl}" target="_blank" 
-            rel="noopener nofollow sponsored ugc">${ad.sponsorName}</a>
+          Sponsored · <a href="${sponsorUrl}" target="_blank" rel="noopener nofollow">${sponsorName}</a>
           <span class="iiuo-ad-badge">Ad</span>
         </span>
         <button class="iiuo-ad-close" aria-label="Dismiss ad">×</button>
       </div>
-      <a class="iiuo-ad-body" href="${ad.href}" target="_blank" 
-         rel="noopener nofollow sponsored ugc">
-        <img class="iiuo-ad-icon" src="${ad.src}" 
-             alt="${ad.adTitle} - Sponsored by ${ad.sponsorName}" loading="lazy" />
+      <a class="iiuo-ad-body" href="${href}" target="_blank" rel="noopener sponsored nofollow">
+        <img class="iiuo-ad-icon" src="${src}" alt="${adTitle} - ${sponsorName}" loading="lazy" />
         <div class="iiuo-ad-text">
-          <div class="iiuo-ad-title">${ad.adTitle}</div>
-          <div class="iiuo-ad-desc">${ad.adDesc}</div>
-          <span class="iiuo-ad-link">${ad.adLink || ad.href}</span>
+          <div class="iiuo-ad-title">${adTitle}</div>
+          <div class="iiuo-ad-desc">${adDesc}</div>
+          <span class="iiuo-ad-link">${adLink}</span>
         </div>
       </a>
     `;
 
-    // Close button
+    // Close button with persistence
     adCard.querySelector(".iiuo-ad-close").addEventListener("click", () => {
+      dismissed[id] = true;
+      saveDismissed(dismissed);
       adCard.remove();
     });
 
@@ -285,16 +292,14 @@
     adCard.querySelector(".iiuo-ad-body").addEventListener("click", () => {
       const now = Date.now();
       if (lastClickTimes[id] && now - lastClickTimes[id] < CLICK_DEBOUNCE_MS) return;
-
       lastClickTimes[id] = now;
       metric.clicks++;
       saveMetrics(metrics);
-
       enqueueEvent("click", {
         ad_id: id,
-        ad_title: ad.adTitle,
-        sponsor: ad.sponsorName,
-        href: ad.href,
+        ad_title: adTitle,
+        sponsor: sponsorName,
+        href: href,
       });
     });
 
@@ -304,67 +309,49 @@
         if (entries[0].isIntersecting) {
           metric.impressions++;
           saveMetrics(metrics);
-
           enqueueEvent("impression", {
             ad_id: id,
-            ad_title: ad.adTitle,
-            sponsor: ad.sponsorName,
+            ad_title: adTitle,
+            sponsor: sponsorName,
           });
-          enqueueEvent("sponsor", { sponsor: ad.sponsorName });
-
+          enqueueEvent("sponsor", { sponsor: sponsorName });
           obs.disconnect();
         }
       }, { threshold: 0.5 });
-
       observer.observe(adCard);
     } else {
       metric.impressions++;
       saveMetrics(metrics);
-
       enqueueEvent("impression", {
         ad_id: id,
-        ad_title: ad.adTitle,
-        sponsor: ad.sponsorName,
+        ad_title: adTitle,
+        sponsor: sponsorName,
       });
-      enqueueEvent("sponsor", { sponsor: ad.sponsorName });
+      enqueueEvent("sponsor", { sponsor: sponsorName });
     }
 
     container.innerHTML = "";
     container.appendChild(adCard);
-
-    if (DEBUG) {
-      console.log("Rendered Ad:", {
-        id,
-        title: ad.adTitle,
-        sponsor: ad.sponsorName,
-        href: ad.href,
-        impressions: metric.impressions,
-        clicks: metric.clicks,
-      });
-    }
+    debugLog("Rendered Ad:", { id, adTitle, sponsorName, href, impressions: metric.impressions, clicks: metric.clicks });
   }
 
   // -------- Boot -------- //
   async function boot() {
     injectCSS();
     const metrics = loadMetrics();
+    const dismissed = loadDismissed();
+    const { ads, rotationInterval } = await fetchAds(XML_PATH);
 
-    // Allow XML path override via <meta name="iiuo-ads-config" content="...">
-    const metaConfig = document.querySelector("meta[name='iiuo-ads-config']");
-    const xmlPath = metaConfig ? metaConfig.content : DEFAULT_XML_PATH;
-
-    const { ads, rotationInterval } = await fetchAds(xmlPath);
     const containers = document.querySelectorAll(".iiuo-ad-container");
-
     if (!ads.length) {
-      containers.forEach((c) => (c.innerHTML = "<p>No ads available.</p>"));
+      containers.forEach((c) => (c.innerHTML = "<p style='text-align:left'>No ads available.</p>"));
       return;
     }
 
     function renderAll() {
       containers.forEach((container) => {
-        const ad = nextAd(metrics);
-        if (ad) renderAdInto(container, ad, metrics);
+        const ad = nextAd(metrics, dismissed);
+        if (ad) renderAdInto(container, ad, metrics, dismissed);
       });
     }
 
@@ -378,8 +365,5 @@
   }
 
   document.addEventListener("DOMContentLoaded", boot);
-
-  // Expose minimal debug API
-  window.iiuoAds = { boot, loadMetrics, sendBatchedEvents };
 
 })();
